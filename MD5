@@ -1,0 +1,9 @@
+b48e2883799779d93d73fbf26f171bb0 *DESCRIPTION
+23463272c0d14b1e504b892d3b6e8f43 *NAMESPACE
+6ec04e6729dbadd0d772b82471e0c2e3 *R/internal_functions.R
+121d2c22bce282eb42ff0690ed47435f *R/multiMarker.R
+90666372ab6c650e685ea33db50c2678 *R/predict.multiMarker.R
+70df53897e7538451f65245e5a2647e4 *R/zzz_figlet.R
+1946fec930ca1761f396bd7e85e33200 *man/internal_functions.Rd
+83de2c5550f37eb58a0d7aeaff91af8e *man/multiMarker.Rd
+ff9fd482375c0980959aa55cba711c73 *man/predict.multiMarker.Rd
