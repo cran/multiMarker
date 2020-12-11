@@ -6,8 +6,8 @@
 multiMarker <- function(y, quantities,
                         niter = 10000, burnIn = 3000,
                         posteriors = FALSE, sigmaAlpha = 1,
-                        tauD = NULL, nuZ1 = NULL, nuZ2 = NULL,
-                        nuSigmaP1 = NULL, nuSigmaP2 = NULL, sigmaWprior = 0.1,
+                        nuZ1 = NULL, nuZ2 = NULL,
+                        nuSigmaP1 = NULL, nuSigmaP2 = NULL, sigmaWprior = 0.000001,
                         nuBeta1 = 2, nuBeta2 = 3, tauBeta = 0.1
 ){
 
@@ -16,11 +16,6 @@ multiMarker <- function(y, quantities,
   #--- constant quantities ---#
   n <- nrow(y)
   P <- ncol(y)
-  temp0 <- cbind( quantities, seq(1,n), y)
-  temp0 <- temp0[order(temp0[,1]), ]
-  y <- temp0[,-c(1,2)]
-  quantities <- temp0[,1]
-  subjID <- temp0[,2]
   temp <- table(quantities)
   D <- dim(temp)
   labels_D <- as.numeric(as.factor(quantities))
@@ -29,30 +24,36 @@ multiMarker <- function(y, quantities,
 
   n_D <- as.numeric(temp) # number of subjects per component
   pi_D <- n_D/sum(n_D)
-  labels_D_Mat <- matrix(0, nrow = n, ncol = D)
-  for ( d in 1:D){
-    labels_D_Mat[which(labels_D == d), d] <- 1 } # true ones
 
   #--- initialization ---#
-  mAlpha  <- mean( lm(y ~ quantities)$coefficients[1,])
-  mBeta <-  mean( lm(y ~ quantities)$coefficients[2,])
+  tmp_lm <- lm(y ~ quantities)
+  mAlpha  <- mean( tmp_lm$coefficients[1,])
+  mBeta <-  mean( tmp_lm$coefficients[2,])
 
   tempAB <- alpha_beta_iniz( x_D, y, D, n_D, P)
   alpha <-  tempAB$alpha_iniz
   beta <-  tempAB$beta_iniz
   tauAlpha = 1
 
+
   tempS <- sigma2_err_iniz(beta, y, D, P)
-  sigma2_err <- tempS$sigma2_err_iniz
-  if( is.null(nuSigmaP1) ){nuSigmaP1 <- 1}
-  if( is.null(nuSigmaP2) ){nuSigmaP2 <- n}
+  sigma2_err <- sapply(1:P, function(x) summary(tmp_lm)[[x]]$sigma *(1/P))^2
+  if( is.null(nuSigmaP1) ){nuSigmaP1 <- 3}
+  if( is.null(nuSigmaP2) ){nuSigmaP2 <- 1}
+  if( is.null(nuZ2) ){
+    nuZ2 <- rep(n, D)
+  }
+  if( is.null(nuZ1) ){
+    tmp <- diff(c(0, x_D))
+    nuZ1 <- seq(D,1, length = D)/2
+    nuZ1[ tmp > 2*median(tmp) ] <- nuZ1[ tmp > 2*median(tmp) ]*2
+  }
 
   muAlpha <- mean(alpha); muBeta <- mean(beta); varBeta <- var(beta)
-  varD <- z_par_iniz(y, sigma2_err, sigmaAlpha,
-                     varBeta, P, D, n_D)
-  if( is.null(nuZ2) ){ nuZ2 <- rep(n, D)}
-  if( is.null(nuZ1) ){ nuZ1 <- seq(D,1, length = D)}
-  z <- rtruncnorm(n, 0, Inf, quantities, 1)
+  varD <- rep(5^2, D)
+
+
+  z <- rtruncnorm(n, 0, Inf, quantities, sqrt(varD))
   tmp <- cbind(labels_D, z)
   muD <- x_D
 
@@ -69,6 +70,8 @@ multiMarker <- function(y, quantities,
   theta <- coef(mod0, matrix = T)
   thetaM <- theta
   probs_c <- t( apply(y, 1, function(x) cauchit_probs(x, theta, D)) )
+  PROBS <- array(NA, dim = c(n, D, niter ))
+  PROBS[,,1] <- probs_c
 
   #--- storing ---#
   ALPHA <- BETA <- SigERR <- matrix(NA, nrow = niter, ncol = P)
@@ -88,12 +91,16 @@ multiMarker <- function(y, quantities,
   boundsL <- c(-Inf, theta[1,-(D-1)])
   boundsU <- c(theta[1,-1], Inf)
   y_Median <- apply(y, 2, function(x) median(x, na.rm = T))
+  y_Var <- apply(y, 2, function(x) var(x, na.rm = T))
 
   #--- compute scale factor ---#
 
-  if( is.null(tauD)){
-    tauD <- x_D/( seq(1,D, length = D)^2)
-  }
+  labelNew <- t(sapply(1:n,
+                       function(i) sapply( 1:D,
+                                           function(d)
+                                             probs_c[i,d]*dtruncnorm(z[i], 0, Inf, x_D[d], sqrt(varD[d])) )))
+  labelNew <- labelNew/rowSums(labelNew)
+  labelNew <- apply(labelNew,1,which.max)
 
 
   #------#
@@ -132,14 +139,19 @@ multiMarker <- function(y, quantities,
                                                           y[,p],
                                                           alpha[p], beta[p], z))
     sigma2_err <- unlist(sigma2_errP[1,])
+
     SigERR[it, ] <- sigma2_err
 
     # update component parameters
-    varDP <- sapply(1:D, function(d) variance_fc_d( z[which(labels_D == d)],
+    n_D <- tabulate( as.factor(sort(labelNew)))
+
+    varDP <- sapply(1:D, function(d) variance_fc_d( z[which(labelNew == d)],
                                                     n_D[d], nuZ1[d], nuZ2[d],
                                                     1, x_D[d],
-                                                    tauD[d]))
+                                                    0))
+
     varD <- unlist(varDP[1,])
+
     SIGD[it, ] <- varD
 
     # update intercept param for weights params
@@ -153,8 +165,8 @@ multiMarker <- function(y, quantities,
     thetaTemp <- theta
     thetaTemp[1,] <- int_prop
     probs_cTemp <- t( apply(y, 1, function(x) cauchit_probs(x, thetaTemp, D)) )
-    lAccTheta <- logPost_MCMC_wcum(probs_cTemp, D, labels_D_Mat, z, quantities) -
-      logPost_MCMC_wcum(probs_c, D, labels_D_Mat, z, quantities )
+    lAccTheta <- logPost_MCMC_wcum(probs_cTemp, D, n, labelNew) -
+      logPost_MCMC_wcum(probs_c, D, n, labelNew)
 
     logU <- log(runif(1))
     indAcc <- ( lAccTheta < logU )
@@ -175,8 +187,8 @@ multiMarker <- function(y, quantities,
     thetaTemp <- theta
     thetaTemp[-1,] <- int_prop
     probs_cTemp <- t( apply(y, 1, function(x) cauchit_probs(x, thetaTemp, D)) )
-    lAccTheta <- logPost_MCMC_wcum(probs_cTemp, D, labels_D_Mat, z, quantities) -
-      logPost_MCMC_wcum(probs_c, D, labels_D_Mat, z, quantities )
+    lAccTheta <- logPost_MCMC_wcum(probs_cTemp, D,n, labelNew) -
+      logPost_MCMC_wcum(probs_c, D, n, labelNew)
 
     logU <- log(runif(1))
     indAcc <- ( lAccTheta < logU )
@@ -190,16 +202,26 @@ multiMarker <- function(y, quantities,
       theta <- thetaTemp # update values
       probs_c <- probs_cTemp
     }
-
     THETA[,,it] <- theta
 
-    # update latent intakes
-    z <- sapply(1:n, function(i)
-      z_fc(  varD[labels_D[i]], x_D[labels_D[i]], sigma2_err,
-             beta, y[i, ], alpha, P, tauD[labels_D[i]]))
+    # compute new probs and update latent intakes
+
+    labelNew <- t(sapply(1:n,
+                         function(i) sapply( 1:D,
+                                             function(d)
+                                               probs_c[i,d]*dtruncnorm(z[i], 0, Inf, x_D[d], sqrt(varD[d])) )))
+    labelNew2 <- labelNew/rowSums(labelNew)
+    labelNew <- apply(labelNew2 , 1, function(x) sample(seq(1,D), 1, prob = x) )
+    labelNew[which(is.na(labelNew))] <- sample(seq(1,D), length(which(is.na(labelNew))), replace = TRUE)
+
+    z <- sapply( 1:n, function(i)
+      z_fc(  varD[labelNew[i]], x_D[labelNew[i]], sigma2_err,
+             beta, y[i,], alpha, P, 1 ))
 
     Z[it, ] <- z
+    PROBS[,,it] <- probs_c
 
+    #---#
     if( it == burnIn[1]){
       STORE_hp_s2P[1,] <- unlist(sigma2_errP[2,])
       STORE_hp_s2P[2,] <- unlist(sigma2_errP[3,])
@@ -233,6 +255,7 @@ multiMarker <- function(y, quantities,
   SigmaErr_E <- sapply(1:P, function(p) msdci(SigmaErr_c[,p]))
   SigmaD_E <- sapply(1:D, function(d) msdci(SigmaD_c[,d]))
   Z_E <- sapply(1:n, function(i) msdci(Z_c[,i]))
+
   THETA_E <- array(NA, dim =c(nrow(THETA_c), ncol(THETA_c),4))
   THETA_E[,,1] <- apply(THETA_c, c(1,2), median)
   THETA_E[,,2] <- apply(THETA_c, c(1,2), sd)
@@ -244,12 +267,12 @@ multiMarker <- function(y, quantities,
   weights_info <- list(acc_probs = acc_probs)
 
   #-- output
-  constants <- list(tauD = tauD, nuZ1 = nuZ1, nuZ2 = nuZ2,
+  constants <- list(nuZ1 = nuZ1, nuZ2 = nuZ2,
                     sigmaAlpha = sigmaAlpha,
                     nuSigmaP1 = nuSigmaP1, nuSigmaP2 = nuSigmaP2,
                     nuBeta1 = nuBeta1, nuBeta2 = nuBeta2,
-                    tauBeta = tauBeta, x_D = x_D, P = P, D = D,
-                    sigmaWprior = sigmaWprior, y_Median = y_Median)
+                    tauBeta = tauBeta, x_D = x_D, P = P, D = D, n = n,
+                    sigmaWprior = sigmaWprior, y_Median = y_Median, y_Var = y_Var)
 
   chains <- list( ALPHA_c = ALPHA_c, BETA_c = BETA_c, SigmaErr_c = SigmaErr_c,
                   SigmaD_c = SigmaD_c, Z_c = Z_c, THETA_c = THETA_c,

@@ -1,6 +1,6 @@
 ##--- utilities ---##
 msdci <- function(p_chain){ # after burn in
-  
+
   out <- c( median(p_chain), sd(p_chain),
             as.numeric( quantile(p_chain, c(0.025, 0.975), na.rm = TRUE) ) )
   return(out)
@@ -12,17 +12,17 @@ msdci <- function(p_chain){ # after burn in
 ##############################
 
 alpha_beta_iniz <- function( x_D, y, D, n_D, P){
-  
+
   tmpN <- c(1,cumsum(n_D))
   meanY_PD <-  sapply(1:P, function(p) # P cols and D rows
-    sapply(1:D, function(d) 
+    sapply(1:D, function(d)
       mean(y[tmpN[d]:tmpN[d+1], p], na.rm = TRUE)
     ))
-  
+
   ncolM <- (D-1)*D - sum( seq(1,D-1) )
   A_Mat <- B_Mat <- matrix( nrow = P, ncol = ncolM )
-  
-  # computing alpha and beta values 
+
+  # computing alpha and beta values
   for( p in 1:P){
     a <- 1
     for( d in D:2){
@@ -36,43 +36,43 @@ alpha_beta_iniz <- function( x_D, y, D, n_D, P){
       }
     }
   } # close P loop (rows are the Ps)
-  
+
   alpha_iniz <- rowMeans(A_Mat, na.rm = TRUE)
   beta_iniz <- rowMeans(B_Mat, na.rm = TRUE)
-  
+
   out <- list( alpha_iniz =  alpha_iniz,  beta_iniz =  beta_iniz)
   return(out)
 }
 
 
 sigma2_err_iniz <- function(beta, y, D, P){
-  
+
   temp1 <- diag( beta%*%t(beta) )/D
   temp2 <- diag( var(y) )
-  
+
   sigma2_err_iniz <- rep( sum( temp2 - temp1, na.rm = TRUE ), P )
   sigma2_err_iniz[which(sigma2_err_iniz <= 0)] <- 0.3
-  
+
   out <- list( sigma2_err_iniz  = sigma2_err_iniz )
   return(out)
 }
 
-z_par_iniz <- function(y, sigma2_err, sigmaAlpha, 
+z_par_iniz <- function(y, sigma2_err, sigmaAlpha,
                        sigmaBeta, P, D, n_D){
   tmpN <- c(1,cumsum(n_D))
-  
+
   temp <- matrix(NA, ncol = P, nrow = D)
   varY_PD <-  sapply(1:P, function(p) # P cols and D rows
-    sapply(1:D, function(d) 
+    sapply(1:D, function(d)
       var(y[tmpN[d]:tmpN[d+1], p], na.rm = TRUE)
     ))
-  
+
   for ( p in 1:P){
     for( d in 1:D){
       temp[d,p] <- (varY_PD[d,p] -sigmaAlpha - sigma2_err[p])/(sigmaBeta)
     }
   }
-  
+
   out <- rowMeans(temp)
   out[which(out <= 0)] <- 0.2
   return(out)
@@ -97,19 +97,23 @@ variance_fc <- function(param, l_param, nu1, nu2,
   return(out)
 }
 
+
 variance_fc_d <- function(param, l_param, nu1, nu2,
                           tau, mu_param, scale_Fact_d){
   nu1_star <- (l_param )/2 + nu1
+  if( is.na(nu1_star)){ nu1_star <- 3}
   if( nu1_star <= 1){ nu1_star <- 1}
   if( is.infinite(nu1_star)){ nu1_star <- 100}
-  nu2_star <- nu2 + sum((param - mu_param)^2, na.rm = TRUE)/(2*scale_Fact_d)
+
+  nu2_star <- nu2 + sum((param - mu_param)^2, na.rm = TRUE)/(2)
+  if( is.na(nu2_star)){ nu2_star <- 3}
   if( nu2_star <= 1){ nu2_star <- 1}
   if( is.infinite(nu2_star)){ nu2_star <- 100}
+
   out <- 1/rgamma( 1, shape = nu1_star, rate = nu2_star)
   OUT <- list( out = out,  nu1_star =  nu1_star, nu2_star = nu2_star )
   return(OUT)
 }
-
 variance_fc_di <- function(param, nu1, nu2,
                            mu_param, p_est_d, n){
   nu1_star <- nu1 + sum( p_est_d * n ,na.rm = T)/2
@@ -136,14 +140,14 @@ alpha_fc <- function( sigma2_a, beta_p, n, mu_a,
   sigma2_star <- (sigma2_err_p * sigma2_a)/(n * sigma2_a + sigma2_err_p)
   mu_star <- (sum(y_p -  beta_p * z, na.rm = T))/(sigma2_err_p) + mu_a/sigma2_a
   mu_star <- sigma2_star * mu_star
-  out <- rtruncnorm(1, 0, Inf, mu_star, sqrt(sigma2_star)) 
+  out <- rtruncnorm(1, 0, Inf, mu_star, sqrt(sigma2_star))
   OUT <- list( out = out,  mu_star =  mu_star, sigma2_star = sigma2_star )
   return(OUT)
 }
 
 beta_fc <- function( sigma2_b, alpha_p, n, mu_b,
                      z, sigma2_err_p, y_p){
-  
+
   sigma2_star <- (sigma2_err_p * sigma2_b)/( sum(z^2, na.rm = T) *
                                                sigma2_b + sigma2_err_p)
   mu_star <- (sum( (y_p -  alpha_p) * z, na.rm = T))/
@@ -156,20 +160,20 @@ beta_fc <- function( sigma2_b, alpha_p, n, mu_b,
 
 #--latent intakes (z) for a given component (d)--#
 
-z_fc <- function( sigma2_d, mu_d, sigma2_err, 
+z_fc <- function( sigma2_d, mu_d, sigma2_err,
                   beta, y_i, alpha, P, scale_Fact_d){
-  
+
   sigma2_d <- sigma2_d * scale_Fact_d
-  sigma2_star <- sum( ((beta^2) * sigma2_d + 
+  sigma2_star <- sum( ((beta^2) * sigma2_d +
                          sigma2_err / P)/(sigma2_d * sigma2_err), na.rm = T )
-  sigma2_star <- (sigma2_star)^(-1)  
+  sigma2_star <- (sigma2_star)^(-1)
   mu_star <- sum((beta * (y_i - alpha)) / sigma2_err, na.rm = T) +
     (mu_d / sigma2_d)
+  mu_star1 <- mu_star
   mu_star <- sigma2_star * mu_star
-  
-  sigma2_star <-  sigma2_star
-  out <- rtruncnorm( 1,0, Inf, mu_star, sqrt(sigma2_star))
-  return(out)  
+  sigma2_star <-  sqrt(sigma2_star)
+
+  return(rtruncnorm( 1, 0, Inf, mu_star, sigma2_star))
 }
 
 #--error variances (sigma_p)--#
@@ -184,10 +188,9 @@ sigma2_err_fc <- function( n, theta1, theta2, y_p,
 }
 
 #--log post MCMC weigths--#
-logPost_MCMC_wcum <- function(prob_nc, D, labelsMat, z, doses){ # non cum probs
-  out <- sum( labelsMat * log(prob_nc), na.rm = T ) 
-  out <- out - sum(abs(z-doses))
- 
+logPost_MCMC_wcum <- function(prob_nc, D, n, labelNew ){ # non cum probs
+  out <- sapply( 1:n, function(x) log(prob_nc)[x,labelNew[x]]  )
+  out <- sum(out)
   return(out)
 }
 
@@ -205,7 +208,7 @@ cauchit_probs <- function(yNew, theta, D){ # Ynew is for a single obs i
 
 dim_range_prob <- function(prob_c, D){
   opz1 <- which(prob_c >=0.5)
-  if( length(opz1) != 0 ){ 
+  if( length(opz1) != 0 ){
     out <- opz1}else{
       tmp2 <- cbind(seq(1,D), prob_c)
       tmp2 <- tmp2[order(tmp2[,2], decreasing = T),]

@@ -5,10 +5,10 @@ export(multiMarker)
 
 importFrom("stats", "rgamma", "runif", "sd", "var",
            "coef", "lm", "median", "quantile", "rnorm")
-importFrom("truncnorm", "rtruncnorm")
+importFrom("truncnorm", "rtruncnorm", "dtruncnorm")
 importFrom("ordinalNet", "ordinalNet")
 importFrom("utils", "flush.console")
 importFrom("utils", "setTxtProgressBar", "txtProgressBar")
 
 S3method("print", "multiMarker")
-S3method(predict, multiMarker)
+S3method("predict", "multiMarker")

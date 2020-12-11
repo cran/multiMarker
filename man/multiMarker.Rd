@@ -11,10 +11,9 @@ Implements the multiMarker model via an MCMC algorithm.
 multiMarker(y, quantities,
             niter = 10000, burnIn = 3000,
             posteriors = FALSE, sigmaAlpha = 1,
-            tauD = NULL, nuZ1 = NULL, nuZ2 = NULL,
-            nuSigmaP1 = NULL, nuSigmaP2 = NULL,
-            sigmaWprior = 0.1, nuBeta1 = 2,
-            nuBeta2 = 3, tauBeta = 0.1)
+            nuZ1 = NULL, nuZ2 = NULL,
+            nuSigmaP1 = NULL, nuSigmaP2 = NULL, sigmaWprior = 0.000001,
+            nuBeta1 = 2, nuBeta2 = 3, tauBeta = 0.1)
 }
 
 
@@ -30,8 +29,6 @@ multiMarker(y, quantities,
 \item{posteriors}{ A logical value indicating if the full parameter chains should also be returned in output. The default value is \code{posteriors = FALSE}.}
 
 \item{sigmaAlpha}{ Intercepts' hyperparameter (\eqn{\sigma_{\alpha^2}}{\sigma_{\alpha^2}}), see details. The default value is \code{sigmaAlpha = 1}.}
-
-\item{tauD}{ A vector of length \eqn{D}{D} storing the scaling factor values for the components' variance parameters (\eqn{\tau_D}{\tau_D}). The default value is \code{tauD = NULL}, corresponding to scaling factor values computed as described in D'Angelo et al., 2020.}
 
 \item{nuZ1, nuZ2}{ Are two vectors of length \eqn{D}{D} storing  hyperparameters for the components' variance parameters. The default values are \code{nuZ1 = nuZ2 = NULL}, corresponding to \code{nuZ1 = (D, D-1, ...,1) } and \code{nuZ2 = (D, D,...,D) }.}
 
@@ -63,7 +60,6 @@ An object of class \code{'multiMarker'} containing the following components:
 }
 \item{constants}{ A list with 11 components, storing constant model quantities:
 \itemize{
-\item{\code{tauD}}{ is a vector containing the scaling factor values for the components' variance parameters (\eqn{\tau_D}{\tau_D}). }
 \item{\code{nuZ1, nuZ2}}{ are two vectors of length \eqn{D}{D} storing  hyperparameters for the components' variance parameters, see References.}
 \item{\code{sigmaAlpha}}{ is a scalar and it corresponds to the variance of the intercept parameters (\eqn{\sigma_{\alpha^2}}{\sigma_{\alpha^2}}).}
 \item{\code{nuSigmaP1, nuSigmaP2}}{ are scalar hyperparameters for the error's variance parameters, see References.}
@@ -72,8 +68,10 @@ An object of class \code{'multiMarker'} containing the following components:
 \item{\code{x_D}}{ is a vector storing the values for the \eqn{D}{D} food quantities. }
 \item{\code{P}}{ is a scalar indicating the number of biomarkers in the data.}
 \item{\code{D}}{ is a scalar indicating the number of food quantities in the data.}
+\item{\code{n}}{ is a scalar indicating the number of observations the data.}
 \item{\code{sigmaWprior}}{ is a scalar and it corresponds to the components' weights hyperparameter, see References.}
 \item{\code{y_Median}}{ is a vector storing the observed \eqn{P}{P} biomarker median values.}
+\item{\code{y_Var}}{ is a vector storing the observed \eqn{P}{P} biomarker variance values.}
 }
 }
 \item{chains}{ If \code{posteriors = TRUE}, a list with posterior distributions of model parameters is returned:
@@ -93,10 +91,10 @@ An object of class \code{'multiMarker'} containing the following components:
 }
 
 \details{ %%%fix
-The function facilitates inference of food intake from multiple biomarkers via MCMC, according to the multiMarker framework (D'Angelo et al., 2020). The multiMarker framework first learns the relationship between the mutiple biomarkers and food intake using data from an intervention study. Prediction of food intake is then facilitated when only biomarker data are available.
+The function facilitates inference of food intake from multiple biomarkers via MCMC, according to the multiMarker model (D'Angelo et al., 2020). The multiMarker model first learns the relationship between the multiple biomarkers and food quantity data from an intervention study and subsequently allows inference on the latent intake when only biomarker data are available.
 
 Consider a biomarker matrix \eqn{\mathbf{Y}}{Y} of dimension \eqn{(n\times P)}{(n x P)}, storing \eqn{P}{P} different biomarker measurements on \eqn{n}{n} independent observations.
-The number of food quantities considered in the intervention study is denoted by \eqn{D}{D}, with the corresponding set being \eqn{\mathbf{X}=(X_1, \dots, X_d, \dots, X_D)}{X=(X_1, ..., X_d, ..., X_D)} and \eqn{X_d < X_{d+1}}{X_d < X_{d+1}}. Individual food quantities are denoted with \eqn{x_i}{x_i}, where \eqn{x_i = X_d}{x_i=X_d} if observation \eqn{i}{i} consumed food quantity \eqn{X_d}{X_d}.
+The number of food quantities considered in the intervention study is denoted by \eqn{D}{D}, with the corresponding set being \eqn{\mathbf{X}=(X_1, \dots, X_d, \dots, X_D)}{X=(X_1, ..., X_d, ..., X_D)} and \eqn{X_d < X_{d+1}}{X_d < X_{d+1}}.
 
 We assume that the biomarker measurements are related to an unobserved, continuous intake value, leading to the following factor analytic model:
 
@@ -108,9 +106,7 @@ y_{ip} = \alpha_p + \beta_p z_i +\epsilon_{ip}, for  i=1,...,n, and p = 1, ...,P
 where the latent variable \eqn{z_i}{z_i} denotes the latent intake of observation \eqn{i}{i}, with \eqn{\mathbf{z}=(z_1, \dots, z_i, \dots, z_n)}{(z_1, ..., z_i, .., z_n)}.
 The \eqn{\alpha_p}{\alpha_p} and \eqn{\beta_p}{\beta_p} parameters characterize, respectively, the intercept and the scaling effect for biomarker \eqn{p}{p}. We assume that these parameters are distributed a priori according to 0-truncated Gaussian distributions, with parameters \eqn{(\mu_{\alpha}, \sigma_{\alpha}^2)}{(\mu_{\alpha}, \sigma_{\alpha}^2 )} and \eqn{(\mu_{\beta}, \sigma_{\beta}^2 )}{(\mu_{\beta}, \sigma_{\beta}^2 )} respectively. The error term \eqn{\epsilon_p}{\epsilon_p} is the variability associated with biomarker \eqn{p}{p}. We assume that these errors are normally distributed with 0 mean and variance \eqn{\sigma_p^2}{\sigma_p^2}, which serves as a proxy for the precision of the biomarker.
 
-A mixture of \eqn{D}{D} 0-truncated Gaussian distributions is assumed as prior distribution for the latent intakes. Components are centered around food quantity values \eqn{X_d}{X_d}, and component-specific variances \eqn{\sigma_d^2}{\sigma_d^2} model food quantity-specific intake variability, with lower values suggesting higher consumption-compliance. Variance-scaling parameters \eqn{\tau_d}{\tau_d} are used as food quantity-specific scaling factors. Mixture weights are denoted with \eqn{\pi_d}{\pi_d}, and are observed in intervention studies.
-
-In the prediction setting, however, only biomarker data are available and so the weights \eqn{\pi_d}{\pi_d} are unknown. Therefore, an ordinal regression model with Cauchit link function is employed  to model the mixture weights, with parameters \eqn{\theta=\{\theta_0, \theta_1, \dots,\theta_d,\dots,\theta_D\}}{\theta=(\theta_0, \theta_1, ...,\theta_d,...,\theta_D)} (food quantity-specific intercepts), and \eqn{\gamma} (a \eqn{P}{P} dimensional scaling coefficient for the biomarkers, which are employed as explanatory variables here).
+A mixture of \eqn{D}{D} 0-truncated Gaussian distributions is assumed as prior distribution for the latent intakes. Components are centered around food quantity values \eqn{X_d}{X_d}, and component-specific variances \eqn{\theta_d^2}{\theta_d^2} model food quantity-specific intake variability, with lower values suggesting higher consumption-compliance. Mixture weights are observation-specific and denoted with \eqn{\pi_i = (\pi_{i1}, \dots,\pi_{iD} ) }{\pi_i =(\pi_{i1}, ..., \pi_{iD})}. Given the inherent ordering of the food quantities in the intervention study, an ordinal regression model with Cauchit link function is employed to model the observation-specific weights.
 
 A Bayesian hierarchical framework is employed for the modelling process, allowing quantification of the uncertainty in intake estimation, and flexibility in adapting to different biomarker data distributions. The framework is implemented through a Metropolis within Gibbs Markov chain Monte Carlo (MCMC) algorithm. Hyperprior distributions are assumed on the prior parameters with the corresponding hyperparameter values fixed based on the data at hand, following an empirical Bayes approach.
 

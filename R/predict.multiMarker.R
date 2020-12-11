@@ -15,6 +15,7 @@ predict.multiMarker <- function( object, y,
   if( is.null(tmp_P )){
     tmp_P <- 1
     checkP <- length(yNew)
+    nNew <- 1
   }else{
     nNew <- tmp_P[1]
     tmp_P <- tmp_P[2]
@@ -35,12 +36,15 @@ predict.multiMarker <- function( object, y,
   sigma2_errUp <- object$estimates$SigmaErr_E[1,]
   varDUp <- object$estimates$SigmaD_E[1,]
   x_D <- unique(object$constants$x_D)
-  tauD <- object$constants$tauD
   thetaUp <- object$estimates$THETA_Est[,,1]
   thetasd <-  object$estimates$THETA_Est[,,2]
   boundsL <- c(-Inf, thetaUp[1,-(D-1)])
   boundsU <- c(thetaUp[1,-1], Inf)
   s2EHp <- object$estimates$varPHp
+
+  nuZ1 <- object$constants$nuZ1
+  nuZ2 <- object$constants$nuZ2
+
 
   #-- old hps --#
   thetaM <-  thetaUp  # (P+1) x D-1
@@ -72,7 +76,8 @@ predict.multiMarker <- function( object, y,
     if( length(tmpNA) != 0 ){
       for(kk in tmpNA ){
         where_temp <- floor((kk-1)/nNew) +1
-        yNew[kk] <- object$y_Median[where_temp]
+        where_temp2 <- kk- (ceiling(kk/nNew)-1)*nNew
+        yNew[where_temp2, where_temp] <- object$constants$y_Median[where_temp]
       }
     }
     #-- STORING --#
@@ -108,23 +113,53 @@ predict.multiMarker <- function( object, y,
       rtruncnorm(1, boundsL[d], boundsU[d], thetaM[1,d], thetasd[1,d] ) )
 
     thetaUp[-1,] <- apply( thetaM[-1,], c(1,2), function(x)
-      rnorm( 1, x, 0.0001))
+      rnorm( 1, x, 0.0001)) #
 
     # compute new probs and sample new z value/values
     if( tmp_P == 1){
 
       probs_c <- cauchit_probs(yNew, thetaUp, D)
-      labelNew <- which.max( probs_c)
+      labelNew <- sapply( 1:D, function(d)
+        probs_c[d]*dtruncnorm(zPred, 0, Inf, x_D[d], sqrt(varDUp[d])) )
+
+      labelNew <- labelNew/sum(labelNew)
+      labelNew <- which.max(labelNew)
+
+      varDP2 <- unlist( variance_fc_d( zPred[labelNew], 1, nuZ1[labelNew],
+                                       nuZ2[labelNew], 1, x_D[labelNew], 0))[1]
+
+
+      varDUp[labelNew] <- varDP2
+
+
       zPred <- z_fc(  varDUp[labelNew], x_D[labelNew], sigma2_errUp,
-                      betaUp, yNew, alphaUp, P, tauD[labelNew] )
+                      betaUp, yNew, alphaUp, P, 1)
       ZPRED[it] <- zPred
       PROBS[it, ] <- probs_c
     }else{
       probs_c <- t(apply(yNew, 1, function(x) cauchit_probs(x, thetaUp, D) ))# matrix with n rows and D cols
-      labelNew <- apply(probs_c, 1, which.max)
+
+      labelNew <- t(sapply(1:nNew,
+                           function(i) sapply( 1:D,
+                                               function(d)
+                                                 probs_c[i,d]*dtruncnorm(zPred[i], 0, Inf, x_D[d], sqrt(varDUp[d])) )))
+      labelNew2 <- labelNew/rowSums(labelNew)
+      labelNew <- apply(labelNew2 , 1, function(x) sample(seq(1,D), 1, prob = x) )
+      labelNew[which(is.na(labelNew))] <- sample(seq(1,D), length(which(is.na(labelNew))), replace = TRUE)
+
+      n_D2 <- tabulate( as.factor(sort(labelNew)))
+
+      varDP2 <- sapply(1:D, function(d) variance_fc_d( zPred[which(labelNew == d)],
+                                                       n_D2[d], nuZ1[d], nuZ2[d],
+                                                       1, x_D[d],
+                                                       0))
+
+
+      varDUp <- unlist(varDP2[1,])
       zPred <- sapply( 1:nNew, function(i)
         z_fc(  varDUp[labelNew[i]], x_D[labelNew[i]], sigma2_errUp,
-               betaUp, yNew[i,], alphaUp, P, tauD[labelNew[i]] ))
+               betaUp, yNew[i,], alphaUp, P, 1 ))
+
       ZPRED[,it] <- zPred
       PROBS[,,it] <- probs_c
     }
@@ -138,7 +173,7 @@ predict.multiMarker <- function( object, y,
     Prob_P4 <- apply(PROBS[burn,], 2, function(x) quantile(x, 0.975))
     Prob_P <- rbind( Prob_P1,  Prob_P2,  Prob_P3,  Prob_P4)
 
-    predictions <- list( ZPred_P = ZPred_P, Prob_P = Prob_P)
+    inferred_E <- list( inferred_intakes = ZPred_P, inferred_Prob = Prob_P)
   }else{
     ZPred_P <- sapply(1:nNew, function(i) msdci(ZPRED[i,burn]))
     Prob_P1 <- apply(PROBS[,,burn], c(1,2), median)
@@ -147,12 +182,12 @@ predict.multiMarker <- function( object, y,
     Prob_P4 <- apply(PROBS[,,burn], c(1,2), function(x) quantile(x, 0.975))
     Prob_P <- array( cbind( Prob_P1,  Prob_P2,  Prob_P3,  Prob_P4), dim = c(nNew, D, 4))
 
-    predictions <- list( ZPred_P = ZPred_P, Prob_P = Prob_P)
+    inferred_E <- list( inferred_intakes = ZPred_P, inferred_Prob = Prob_P)
   }
 
-  chains <- list( ZPRED = ZPRED, PROBS = PROBS)
+  chains <- list( ZINF = ZPRED, PROBS = PROBS)
 
-  out <- list( predictions = predictions,
+  out <- list( inferred_E = inferred_E,
                chains = if(posteriors) chains else NULL)
   return(out)
 

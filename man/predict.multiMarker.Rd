@@ -1,9 +1,9 @@
 \name{predict.multiMarker}
 \alias{predict.multiMarker}
-\title{A latent variable framework to predict food intake from multiple biomarkers.}
+\title{A latent variable model to infer food intake from multiple biomarker data alone.}
 
 \description{
-Implements the multiMarker framework via an MCMC algorithm.
+Implements the multiMarker model via an MCMC algorithm.
 }
 
 \usage{
@@ -29,42 +29,26 @@ Implements the multiMarker framework via an MCMC algorithm.
 
 
 \value{A list with 2 components:
-\item{predictions}{ a list with 2 components, storing posterior predictive estimates of medians, standard deviations and \eqn{95\%}{95\%} credible interval lower and upper bounds for:
+\item{inferred_E}{ a list with 2 components, storing estimates of medians, standard deviations and \eqn{95\%}{95\%} credible interval lower and upper bounds for:
 \itemize{
-\item{\code{ZPred_P}}{ is a matrix of dimension \eqn{(4\times n^*)}{(4 x n*)}, storing the posterior predictive estimates of medians (1st row), standard deviations (2nd row) and \eqn{95\%}{95\%} credible interval lower (3rd row) and upper bounds (4th row) for the \eqn{n^{*}}{n*} latent intakes, \eqn{(z_1^{*}, \dots, z_{n^*})}{(z_1*, ..., z_n*)}.}
-\item{\code{Prob_P}}{ is an array of dimension \eqn{(n^{*}\times D\times 4)}{(n* x D x 4)}, storing estimated median (1st matrix), standard deviation (2nd matrix) and \eqn{95\%}{95\%} credible interval lower (3rd matrix) and upper bound (4th matrix) values for the posterior predictive food quantity probabilities, for each one of the new \eqn{ {n^*}}{n*} observations.}
+\item{\code{inferred_intakes}}{ is a matrix of dimension \eqn{(4\times n^*)}{(4 x n*)}, storing the estimates of medians (1st row), standard deviations (2nd row) and \eqn{95\%}{95\%} credible interval lower (3rd row) and upper bounds (4th row) from the conditional distribution of the \eqn{n^{*}}{n*} latent intakes, \eqn{(z_1^{*}, \dots, z_{n^*})}{(z_1*, ..., z_n*)}.}
+\item{\code{inferred_Prob}}{ is an array of dimension \eqn{(n^{*}\times D\times 4)}{(n* x D x 4)}, storing estimated median (1st matrix), standard deviation (2nd matrix) and \eqn{95\%}{95\%} credible interval lower (3rd matrix) and upper bound (4th matrix) values for the food quantity probabilities, for each one of the new \eqn{ {n^*}}{n*} observations.}
 }
 }
-\item{chains}{ If \code{posteriors = TRUE}, it contains a list with posterior predictive distributions for:
+\item{chains}{ If \code{posteriors = TRUE}, it contains a list with conditional distributions for:
 \itemize{
-\item{\code{ZPRED}}{ is a matrix of dimension \eqn{n^{*}\times niter}{n* x niter} containing samples from the posterior predictive distributions of the latent intakes, \eqn{(z_1^{*}, \dots, z_{n^*})}{(z_1*, ..., z_n*)}.}
-\item{\code{PROBS}}{ is an array of \eqn{ n^{*}\times D \times niter }{n^{*} x D x niter} dimensions containing samples from the posterior predictive distribution for food quantity probabilities, for each observation and food quantity.}
+\item{\code{ZINF}}{ is a matrix of dimension \eqn{n^{*}\times niter}{n* x niter} containing samples from the conditional distributions of the latent intakes, \eqn{(z_1^{*}, \dots, z_{n^*})}{(z_1*, ..., z_n*)}.}
+\item{\code{PROBS}}{ is an array of \eqn{ n^{*}\times D \times niter }{n^{*} x D x niter} dimensions containing samples from the conditional distribution for food quantity probabilities, for each observation and food quantity.}
 }
 }
 }
 
 \details{ %%%fix
-The function facilitates food intake prediction from multiple biomarkers via MCMC, according to the multiMarker framework (D'Angelo et al., 2020).
+The function facilitates inference on food intake from multiple biomarkers alone via MCMC, according to the multiMarker model (D'Angelo et al., 2020).
 
-When new biomarker data are available, the multiMarker framework can use such data to perform intake prediction. Indeed, consider \eqn{n^{*}}{n*} new observations, \eqn{j=1,\dots,n^{*}}{j=1,...,n*}, for which only biomarker data are observed (\eqn{Y^{*}}{Y*}). Here, predicted intake values for new observation \eqn{j}{j}, \eqn{z_j^{*}}{z_j*}, can be sampled from its predictive posterior distribution:
+A Bayesian framework is employed for the modelling process, allowing quantification of the uncertainty associated with inferred intake. The framework is implemented through an MCMC algorithm.
 
-\deqn{p(z_j^{*}\mid \mathbf{z}, y_{j}^{*}) \propto\int p(z_j^{*} \mid \Omega, y_{j}^{*}) p(\Omega \mid \mathbf{z})  \,d\Omega}{
-p(z_j* | z, y_j*) ∝ ∫ p(z_j* | \Omega, y_j*) p(\Omega | z)  d\Omega
-}
-
-where \eqn{\Omega = \{  \theta, \gamma, c_j, \mu_{z1}, \dots, \mu_{zD}, \sigma_{zq}^2, \dots , \sigma_{zD}^2\}}{\Omega = \{  \theta, \gamma, c_j, \mu_{z1}, \dots, \mu_{zD}, \sigma_{zq}^2, \dots , \sigma_{zD}^2\}} is the set of prediction parameters, and
-
-\deqn{
-p(z_j^{*} \mid \Omega, y_{j}^{*}) =\sum_{d=1}^D \pi_d( \theta_d, \gamma, y_j^{*}, c_{jd}) \mathcal{N}_{[0, \infty]} (\mu_{zd} , \sigma_{zd}^2)
-}{
-p(z_j* | \Omega, y_j*) =\sum_{d=1}^D \pi_d( \theta_d, \gamma, y_j*, c_{jd}) N_[0, \infty] (\mu_{zd} , \sigma_{zd}^2)
-}
-
-is the sampling distribution for \eqn{z_j^{*}}{z_j*}, with \eqn{\mu_{zd} = \frac{\mu_z\sigma_d^2\tau_d + X_d\sigma_z^2}{\sigma_d^2\tau_d +\sigma_z^2}}{\mu_{zd} = (\mu_z\sigma_d^2\tau_d + X_d\sigma_z^2)/(\sigma_d^2\tau_d +\sigma_z^2)} and \eqn{\sigma_{zd}^2 =\bigl( \frac{1}{\sigma_d^2\tau_d } + \frac{1}{\sigma_z^2} \bigr)^{-1}}{\sigma_{zd}^2 = ( 1/(\sigma_d^2\tau_d) + 1/\sigma_z^2 )^{-1}}.
-
-A Bayesian framework is employed for the modelling process, allowing quantification of the uncertainty in intake predictions. The framework is implemented through an MCMC algorithm.
-
-For more details on how to perform latent intake predictions, see D'Angelo et al. (2020).
+For more details, see D'Angelo et al. (2020).
 }
 
 
@@ -122,36 +106,29 @@ abline( h = mean(modM$chains$BETA_c[,2]), lwd = 2, col = "darkred")
 # ESS(modM$chains$ALPHA_c[,3]) # effective sample size for alpha_3 MCMC chain
 # ESS(modM$chains$BETA_c[,2]) # effective sample size for beta_2 MCMC chain
 
-#-- Predict intakes from biomarker only data --#
+#-- Infer intakes from biomarker only data --#
 # Number of iterations (and burnIn) set small for example.
-predM <- predict(modM, y = YNew, niter = 100, burnIn = 30,
+infM <- predict(modM, y = YNew, niter = 100, burnIn = 30,
                  posteriors = TRUE)
 # niter and burnIn values are low only for example purpose
 
 #-- Extract summary statistics for a given intake --#
 obs_j <- 2 # choose which observation to look at
-predM$predictions$ZPred_P[, obs_j] #predicted median, standard deviation,
+infM$inferred_E$inferred_intakes[, obs_j] #inferred median, standard deviation,
 # 0.025 and 0.975 quantiles for the intake of observation obs_j
 
-#-- Example of posterior predictive plots --#
-obs_j <- 2 # choose which observation to look at
-par(mfrow=c(1,2), oma = c(0, 0, 2, 0))
-barplot(predM$predictions$Prob_P[obs_j,,1],
-        xlab = "Food quantity", ylab = "Probability",
-        main = "Median posterior probability \nof consuming intervention study \nfood quantities",
-cex.main = 0.7) #  Posterior food quantity probabilities
-axis(1, at = seq(1, D), labels = x)
-
-hist(predM$chains$ZPRED[obs_j, ], breaks = 50,
+#-- Example of plot --#
+par(mfrow = c(1,1))
+hist(infM$chains$ZINF[obs_j, ], breaks = 50,
     ylab = "Density", xlab = "Intake",
-    main = "Posterior predictive distribution \nof intake",
+    main = "Intake's conditional distribution",
     cex.main = 0.7,
-    freq = FALSE) # Posterior predictive distribution of intake for observation obs_j
-abline( v = predM$predictions$ZPred_P[1,obs_j], col = "darkred",
+    freq = FALSE) # Inferred condtional distribution of intake for observation obs_j
+abline( v = infM$inferred_E$inferred_intakes[1,obs_j], col = "darkred",
 lwd = 2 ) # median value
-abline( v = predM$predictions$ZPred_P[3,obs_j], col = "grey",
+abline( v = infM$inferred_E$inferred_intakes[3,obs_j], col = "grey",
 lwd = 2 )
-abline( v = predM$predictions$ZPred_P[4,obs_j], col = "grey",
+abline( v = infM$inferred_E$inferred_intakes[4,obs_j], col = "grey",
 lwd = 2 )
 legend( x = "topleft", fill = c("grey", "darkred"), title = "quantiles:",
 legend = c("(0.025, 0.975)", "0.5"), bty = "n", cex = 0.7)
